@@ -5,7 +5,7 @@ app = Flask(__name__)
 
 # Replace these with your actual RDS credentials
 # In production, use AWS Secrets Manager or environment variables
-DB_HOST = "database-1.xxxxxx.us-east-1.rds.amazonaws.com"
+DB_HOST = "RDS_db_mysql_endpoint_url"
 DB_USER = "admin"
 DB_PASSWORD = "password"
 DB_NAME = "mydb"
