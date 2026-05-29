@@ -1,0 +1,71 @@
+CLUSTER CREATION
+
+eksctl create cluster \
+  --name demo-cluster \
+  --region us-east-1 \
+  --nodegroup-name workers \
+  --node-type t3.medium \
+  --nodes 2
+
+This will create EKS-cluster with 2 ec2 instances as worker Nodes and t2.medium will be instance type.
+
+OIDC CREATION
+
+eksctl utils associate-iam-oidc-provider \
+  --cluster demo-cluster \
+  --approve
+
+OIDC is required for IRSA (IAM ROLES FOR SERVICE ACCOUNT) so that each pod can securly access the aws api services.
+
+curl -O https://raw.githubusercontent.com/kubernetes-sigs/aws-load-balancer-controller/v2.11.0/docs/install/iam_policy.json
+
+Download the IAM policy json file that we will be using for creating IAM policy.
+
+aws iam create-policy \
+  --policy-name AWSLoadBalancerControllerIAMPolicy \
+  --policy-document file://iam_policy.json
+
+Create policy by using json file 
+
+eksctl create iamserviceaccount \
+  --cluster demo-cluster \
+  --namespace kube-system \
+  --name aws-load-balancer-controller \
+  --attach-policy-arn arn:aws:iam::<ACCOUNT-ID>:policy/AWSLoadBalancerControllerIAMPolicy \
+  --approve
+
+Create service account and attach policy we have created.
+
+helm install aws-load-balancer-controller eks/aws-load-balancer-controller \
+  -n kube-system \
+  --set clusterName=demo-cluster \
+  --set serviceAccount.create=false \
+  --set serviceAccount.name=aws-load-balancer-controller \
+  --set region=us-east-1 \
+  --set vpcId=<VPC-ID>
+
+Install alb controller using helm chart to the cluster and attach service account we have created to the alb controller so the controller node can securly access aws alb api.
+
+eksctl create iamserviceaccount \
+  --cluster demo-cluster \
+  --namespace kube-system \
+  --name ebs-csi-controller-sa \
+  --attach-policy-arn arn:aws:iam::aws:policy/service-role/AmazonEBSCSIDriverPolicy \
+  --approve
+
+Now we are creating another service account in the cluster and attaching EBS Driver policy
+
+eksctl create addon \
+  --name aws-ebs-csi-driver \
+  --cluster demo-cluster \
+  --service-account-role-arn <ROLE-ARN>
+
+We are creating ebs-csi-driver addon in the cluster and attaching the ebs service account, this addon is required because we need persistant volume for data storage.
+
+helm install three-tier-app ./helm
+
+Now deploy the application inside the helm
+
+kubectl apply -f helm/ingress.yaml
+
+And also apply ingress file. 
