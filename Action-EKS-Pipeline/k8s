@@ -1,0 +1,210 @@
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: front
+spec:
+  replicas: 3
+  selector:
+    matchLabels: 
+      name: front
+  template:
+    metadata:
+      labels:
+        name: front
+    spec:
+      containers:
+        - name: frontend
+          image: nihanthsai/nihan:fronternew5
+          ports:
+            - containerPort: 5173
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: frontservice
+spec:
+  type: ClusterIP
+  selector:
+    name: front
+  ports:
+    - port: 80
+      targetPort: 5173
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: ingress-front
+  annotations:
+    alb.ingress.kubernetes.io/scheme: internet-facing
+    alb.ingress.kubernetes.io/target-type: ip
+spec:
+  ingressClassName: alb
+  rules:
+    - http:
+        paths:
+        - path: /api
+          pathType: Prefix
+          backend:
+            service:
+              name: backservice
+              port:
+                number: 80
+        - path: /
+          pathType: Prefix
+          backend:
+            service:
+              name: frontservice
+              port:
+                number: 80
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: back
+spec:
+  replicas: 3
+  selector:
+    matchLabels: 
+      name: back
+  template:
+    metadata:
+      labels:
+        name: back
+    spec:
+      containers:
+        - name: backend
+          image: nihanthsai/nihan:backnew2
+          env:
+            - name: DB_HOST
+              value: "dbservice"
+
+            - name: DB_PORT
+              value: "5432"
+
+            - name: DB_USER
+              value: "postgres"
+
+            - name: DB_NAME
+              value: "userdb"
+
+            - name: PORT
+              value: "5000"
+
+            - name: DB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: db-secret
+                  key: DB_PASSWORD
+
+            - name: JWT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: db-secret
+                  key: JWT_SECRET
+          ports:
+            - containerPort: 5000
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: backservice
+spec:
+  type: ClusterIP
+  selector:
+    name: back
+  ports:
+    - port: 80
+      targetPort: 5000
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: db
+spec:
+  replicas: 1
+  selector:
+    matchLabels: 
+      name: db
+  template:
+    metadata:
+      labels:
+        name: db
+    spec:
+      containers:
+        - name: database-postgres
+          image: postgres
+          ports:
+            - containerPort: 5432
+          env:
+            - name: POSTGRES_USER
+              value: postgres
+
+            - name: POSTGRES_DB
+              value: userdb
+
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: db-secret
+                  key: DB_PASSWORD
+          volumeMounts:
+            - name: s3-volume
+              mountPath: /var/lib/postgresql
+
+            - name: init-script
+              mountPath: /docker-entrypoint-initdb.d
+      volumes:
+        - name: ebs-volume
+          persistentVolumeClaim:
+            claimName: s3-test-pvc
+        - name: init-script
+          configMap:
+            name: Employee-db
+          
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: dbservice
+spec:
+  type: ClusterIP
+  selector:
+    name: db
+  ports:
+    - port: 5432
+      targetPort: 5432
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: db-secret
+stringData:
+  DB_PASSWORD: "password"
+  JWT_SECRET: "mysecretkey"
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: s3-test-pvc
+spec:
+  accessModes:
+    - ReadWriteOnce
+  storageClassName: gp3-1
+  resources:
+    requests:
+      storage: 5Gi
+---
+apiVersion: storage.k8s.io/v1
+kind: StorageClass
+metadata:
+  name: gp3-1
+provisioner: ebs.csi.eks.amazonaws.com
+volumeBindingMode: WaitForFirstConsumer
+allowVolumeExpansion: true
+parameters:
+  type: gp3
+  fsType: ext4
+
+
+
