@@ -1,6 +1,0 @@
-express 
-pg
-bcryptjs
-jsonwebtoken
-cors
-dotenv
