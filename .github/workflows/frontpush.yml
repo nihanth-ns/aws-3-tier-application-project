@@ -1,0 +1,27 @@
+name: Push to front-pods
+on:
+    workflow_dispatch:
+jobs:
+    sender:
+        runs-on: ubuntu-latest
+        steps:
+        - name: folder move
+          uses: actions/checkout@v4
+          with:
+           sparse-checkout: ACTIONS-EKS-PIPE-DEPLOY
+        - name: version check
+          working-directory: ACTIONS-EKS-PIPE-DEPLOY/frontend
+          run: |
+            VERSION=$(cat up_cmg_versions.txt)
+            PREV_VERSION=$((VERSION - 1))
+            echo "PREV_VERSION=$PREV_VERSION" >> $GITHUB_ENV
+        - name: Push to EKS
+          run: |
+            sudo snap install aws-cli --classic
+            aws configure set aws_access_key_id ${{ secrets.aws_access_key_id }} && aws configure set aws_secret_access_key ${{ secrets.aws_secret_access_key }}  && aws configure set default.region "us-east-1" && aws configure set default.output "json"
+            aws ecr get-login-password --region us-east-1 | docker login --username AWS --password-stdin 384235570959.dkr.ecr.us-east-1.amazonaws.com
+            docker pull 384235570959.dkr.ecr.us-east-1.amazonaws.com/pipeline/eks:frontv${{ env.PREV_VERSION }}
+            sudo snap install kubectl --classic   
+            curl -sL "https://github.com/eksctl-io/eksctl/releases/latest/download/eksctl_Linux_amd64.tar.gz" | tar xz -C /tmp && sudo mv /tmp/eksctl /usr/local/bin/   
+            aws eks update-kubeconfig --name serious-funk-crab
+            kubectl set image deployment/front frontend=384235570959.dkr.ecr.us-east-1.amazonaws.com/pipeline/eks:frontv${{ env.PREV_VERSION }}
